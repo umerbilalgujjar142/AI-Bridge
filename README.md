@@ -12,7 +12,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 7 — Embeddings (text-embedding-3-small, 1536 dimensions)
 - [x] Phase 8 — Knowledge documents, chunking and ingestion
 - [x] Phase 9 — Vector database (PostgreSQL + pgvector)
-- [ ] Phase 10 — RAG pipeline wired into `/api/chat`
+- [x] Phase 10 — RAG pipeline wired into `/api/chat`
+- [ ] Phase 11 — Next
 
 ## Local setup (backend)
     cd backend
@@ -54,6 +55,32 @@ Search happens **inside the database** with pgvector's cosine distance operator
 every vector into Node. `npm run ingest` replaces the whole table in one transaction,
 so it always mirrors `docs/knowledge-base/`.
 
+## RAG pipeline (Phase 10)
+`POST /api/chat` no longer asks the model to answer from memory. Each request runs:
+
+1. **Embed** the question with `text-embedding-3-small`
+2. **Retrieve** the 3 closest chunks from `knowledge_chunks` (pgvector, cosine distance)
+3. **Filter** out chunks scoring below `0.3` — nothing left means no model call at all
+4. **Generate** an answer from a prompt that contains only those chunks
+
+The system prompt forbids outside knowledge and requires the model to say
+*"I could not find that in the knowledge base."* when the context does not cover the
+question. The response carries the sections it used, so every answer is traceable:
+
+    {
+      "answer": "You receive 10 days of paid sick leave per year.",
+      "sources": [{ "documentId": "company-policies", "section": "Sick Leave", "score": 0.586 }],
+      "grounded": true
+    }
+
+Two behaviours worth knowing:
+- **Off-topic questions** ("what is the capital of France?") never reach the model — the
+  score threshold stops them, which saves tokens and prevents invented answers.
+- **A high score does not mean the answer exists.** "How do I reset a *customer's* password?"
+  retrieves "Resetting Your Password" at 0.735, but that section only covers resetting *your
+  own* password, so the model correctly refuses. Retrieval finds related text; grounding
+  decides whether it actually answers the question.
+
 ## Local setup (frontend)
     cd frontend
     cp .env.example .env.local
@@ -66,7 +93,7 @@ so it always mirrors `docs/knowledge-base/`.
 | Method | Path        | Description |
 |--------|-------------|-------------|
 | GET    | `/health`   | Liveness check (used by Container Apps probes later) |
-| POST   | `/api/chat` | `{ "message": "..." }` → `{ "answer": "...", "source": "..." }` |
+| POST   | `/api/chat` | `{ "message": "..." }` → `{ "answer": "...", "sources": [...], "grounded": true }` |
 
 ## Environment variables
 Backend (`backend/.env`):

@@ -1,9 +1,17 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 const REQUEST_TIMEOUT_MS = 30_000;
 
+export interface ChatSource {
+  documentId: string;
+  title: string;
+  section: string;
+  score: number; // cosine similarity, higher = closer match
+}
+
 export interface ChatResponse {
   answer: string;
-  source: string;
+  sources: ChatSource[];
+  grounded: boolean; // false = no knowledge base match, the answer is a polite refusal
 }
 
 export async function sendChatMessage(message: string): Promise<ChatResponse> {

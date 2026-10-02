@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { sendChatMessage } from './api/chat';
+import { sendChatMessage, type ChatSource } from './api/chat';
 import './App.css';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  sources?: ChatSource[]; // which knowledge base sections the answer came from
+  failed?: boolean; // the request for this message never got an answer
 }
 
 const MAX_LENGTH = 2000; // matches the backend DTO's @MaxLength
@@ -25,16 +27,27 @@ export default function App() {
     const text = input.trim();
     if (!text || isLoading) return;
 
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'user', content: text }]);
+    // Generate the id outside the updater: React may call an updater twice in
+    // development, and the id must stay the same so we can mark it failed later.
+    const messageId = crypto.randomUUID();
+    setMessages((prev) => [...prev, { id: messageId, role: 'user', content: text }]);
     setInput('');
     setError(null);
     setIsLoading(true);
 
     try {
-      const { answer } = await sendChatMessage(text);
-      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: 'assistant', content: answer }]);
+      const { answer, sources } = await sendChatMessage(text);
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: 'assistant', content: answer, sources },
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
+      // The error banner is cleared by the next send, so mark the message
+      // itself — otherwise the history shows an unanswered question as normal.
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, failed: true } : m)),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -51,8 +64,22 @@ export default function App() {
         {messages.length === 0 && <p className="chat__empty">Ask a question to get started.</p>}
 
         {messages.map((m) => (
-          <div key={m.id} className={`message message--${m.role}`}>
+          <div
+            key={m.id}
+            className={`message message--${m.role}${m.failed ? ' message--failed' : ''}`}
+          >
             {m.content}
+            {m.failed && <span className="message__failed" title="This message was not answered"> · not sent</span>}
+            {m.sources && m.sources.length > 0 && (
+              <div className="message__sources">
+                <span className="message__sources-label">Sources</span>
+                {m.sources.map((s) => (
+                  <span key={`${s.documentId}-${s.section}`} className="source" title={`${s.title} · similarity ${s.score}`}>
+                    {s.section}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
 
