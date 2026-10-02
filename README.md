@@ -5,7 +5,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 ## Status
 - [x] Phase 1 — Local backend foundation (NestJS)
 - [x] Phase 2 — React frontend (Vite, port 5178)
-- [ ] Phase 3 — Azure account and resources
+- [x] Phase 3 — Azure account and resources
+- [ ] Phase 4 — Azure identity
 
 ## Local setup (backend)
     cd backend
@@ -43,4 +44,11 @@ Frontend (`frontend/.env.local`):
 | `VITE_API_BASE_URL` | public config | `http://localhost:3000` |
 
 ## Azure resources
-_None yet — created starting in Phase 3._
+Region: **East US 2** (all resources go in this region)
+
+| Resource | Name | Status |
+|---|---|---|
+| Resource Group | `rg-aibridge-dev` | ✅ Created (Phase 3) |
+| Budget alert | `budget-aibridge-monthly` (US$10/month) | ✅ Created (Phase 3) |
+
+More resources are added here as we create them in later phases.
