@@ -10,7 +10,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 5 — Azure Key Vault
 - [x] Phase 6 — Azure AI text generation (gpt-5-mini, keyless)
 - [x] Phase 7 — Embeddings (text-embedding-3-small, 1536 dimensions)
-- [ ] Phase 8 — Knowledge documents
+- [x] Phase 8 — Knowledge documents, chunking and ingestion
+- [ ] Phase 9 — Vector database (PostgreSQL + pgvector)
 
 ## Local setup (backend)
     cd backend
@@ -23,6 +24,17 @@ Azure access uses your developer login (no keys in code):
     az login --tenant <tenant-id>
     npm run azure:check       # verifies identity, RBAC and Key Vault access
     npm run embeddings:demo   # embeds sample sentences and prints similarity scores
+
+## Knowledge base (RAG documents)
+Fictional company documents live in `docs/knowledge-base/` (Bridgeway Labs / BridgeDesk).
+
+    cd backend
+    npm run chunks:preview                     # how the documents are split into chunks
+    npm run ingest                             # read → chunk → embed → backend/data/knowledge-index.json
+    npm run search -- "your question"          # top 3 most similar chunks
+
+Chunking: one chunk per `##` section, long sections split at paragraphs (~1500 chars max),
+every chunk prefixed with "Title — Section". Re-run `npm run ingest` after changing documents.
 
 ## Local setup (frontend)
     cd frontend

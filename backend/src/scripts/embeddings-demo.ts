@@ -1,20 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module.js';
 import { AzureOpenAiService } from '../azure/azure-openai.service.js';
-
-// Cosine similarity: how closely two vectors point in the same direction.
-// ~1.0 = very similar meaning, lower = less related.
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
+import { cosineSimilarity } from '../rag/similarity.js';
 
 const question = 'How do I reset my password?';
 const sentences = [
@@ -22,7 +9,7 @@ const sentences = [
   'Steps to recover your account credentials.',
   'Our remote work policy allows two days per week.',
   'The weather in Lahore is hot today.',
-  'Mein apna password bhool gaya hoon.'
+  'Mein apna password bhool gaya hoon.',
 ];
 
 const app = await NestFactory.createApplicationContext(AppModule, {
