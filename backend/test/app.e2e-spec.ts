@@ -4,15 +4,20 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
+import { AzureOpenAiService } from '../src/azure/azure-openai.service.js';
 
 describe('AI Bridge API (e2e)', () => {
   let app: NestExpressApplication;
   let server: App;
 
   beforeAll(async () => {
+    // Replace the real model with a fake: tests must be fast, free and not depend on Azure.
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(AzureOpenAiService)
+      .useValue({ generate: () => Promise.resolve('Fake AI answer') })
+      .compile();
     app = moduleRef.createNestApplication<NestExpressApplication>();
     configureApp(app);
     await app.init();
@@ -29,12 +34,15 @@ describe('AI Bridge API (e2e)', () => {
       .expect(200)
       .expect((res) => expect(res.body.status).toBe('ok')));
 
-  it('POST /api/chat → 200 with mock answer', () =>
+  it('POST /api/chat → 200 with AI answer', () =>
     request(server)
       .post('/api/chat')
       .send({ message: 'What is Key Vault?' })
       .expect(200)
-      .expect((res) => expect(res.body.source).toBe('mock')));
+      .expect((res) => {
+        expect(res.body.answer).toBe('Fake AI answer');
+        expect(res.body.source).toBe('azure-openai');
+      }));
 
   it('POST /api/chat with empty message → 400', () =>
     request(server).post('/api/chat').send({ message: '   ' }).expect(400));

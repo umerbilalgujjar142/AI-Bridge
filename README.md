@@ -8,7 +8,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 3 — Azure account and resources
 - [x] Phase 4 — Azure identity (DefaultAzureCredential)
 - [x] Phase 5 — Azure Key Vault
-- [ ] Phase 6 — Azure AI text generation
+- [x] Phase 6 — Azure AI text generation (gpt-5-mini, keyless)
+- [ ] Phase 7 — Embeddings
 
 ## Local setup (backend)
     cd backend
@@ -46,6 +47,8 @@ Backend (`backend/.env`):
 | `AZURE_SUBSCRIPTION_ID` | config | `<subscription-id>` |
 | `AZURE_RESOURCE_GROUP` | config | `rg-aibridge-dev` |
 | `KEY_VAULT_URL` | config | `https://kv-aibridge-learn.vault.azure.net/` |
+| `AZURE_OPENAI_ENDPOINT` | config | `https://aif-aibridge-learn.openai.azure.com/openai/v1` |
+| `AZURE_OPENAI_DEPLOYMENT` | config | `gpt-5-mini` |
 
 None of these are secrets. Secret values live in Key Vault.
 
@@ -63,6 +66,8 @@ Region: **East US 2** (all resources go in this region)
 | Resource Group | `rg-aibridge-dev` | ✅ Created (Phase 3) |
 | Budget alert | `budget-aibridge-monthly` (US$10/month) | ✅ Created (Phase 3) |
 | Key Vault (Standard, RBAC) | `kv-aibridge-learn` | ✅ Created (Phase 5) |
+| Foundry resource (AIServices) | `aif-aibridge-learn` (project `proj-aibridge`) | ✅ Created (Phase 6) |
+| Model deployment | `gpt-5-mini` (Global Standard, 200K TPM, retires Feb 2027) | ✅ Created (Phase 6) |
 
 ## Authentication & access
 The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.module.ts`):
@@ -73,6 +78,9 @@ The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.m
 |---|---|---|
 | Developer (you) | Key Vault Secrets Officer | `kv-aibridge-learn` |
 | Container App identity | Key Vault Secrets User (read-only) | `kv-aibridge-learn` (Phase 14) |
+| Container App identity | Cognitive Services OpenAI User | `aif-aibridge-learn` (Phase 14) |
+
+The AI model is called **keyless** (Entra ID token), so no API key is stored anywhere.
 
 Secrets in Key Vault: `demo-secret` (test only).
 

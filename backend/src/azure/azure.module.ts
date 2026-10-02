@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { DefaultAzureCredential, type TokenCredential } from '@azure/identity';
 import { AZURE_CREDENTIAL } from './azure.constants.js';
+import { AzureOpenAiService } from './azure-openai.service.js';
 import { KeyVaultService } from './key-vault.service.js';
 
 @Global()
@@ -11,7 +12,8 @@ import { KeyVaultService } from './key-vault.service.js';
       useFactory: (): TokenCredential => new DefaultAzureCredential(),
     },
     KeyVaultService,
+    AzureOpenAiService,
   ],
-  exports: [AZURE_CREDENTIAL, KeyVaultService],
+  exports: [AZURE_CREDENTIAL, KeyVaultService, AzureOpenAiService],
 })
 export class AzureModule {}
