@@ -13,4 +13,5 @@ export const envValidationSchema = Joi.object({
   KEY_VAULT_URL: Joi.string().uri({ scheme: 'https' }).required(),
   AZURE_OPENAI_ENDPOINT: Joi.string().uri({ scheme: 'https' }).required(),
   AZURE_OPENAI_DEPLOYMENT: Joi.string().required(),
+  AZURE_OPENAI_EMBEDDING_DEPLOYMENT: Joi.string().required(),
 });

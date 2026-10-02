@@ -20,7 +20,8 @@
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
-    "azure:check": "nest build && node dist/scripts/check-azure-identity.js"
+    "azure:check": "nest build && node dist/scripts/check-azure-identity.js",
+    "embeddings:demo": "nest build && node dist/scripts/embeddings-demo.js"
   },
   "dependencies": {
     "@azure/arm-resources": "^8.0.0",

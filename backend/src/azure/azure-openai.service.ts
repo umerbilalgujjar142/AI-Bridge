@@ -17,13 +17,17 @@ const COGNITIVE_SERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default';
 export class AzureOpenAiService {
   private readonly logger = new Logger(AzureOpenAiService.name);
   private readonly client: OpenAI;
-  private readonly deployment: string;
+  private readonly chatDeployment: string;
+  private readonly embeddingDeployment: string;
 
   constructor(
     @Inject(AZURE_CREDENTIAL) credential: TokenCredential,
     config: ConfigService,
   ) {
-    this.deployment = config.getOrThrow<string>('AZURE_OPENAI_DEPLOYMENT');
+    this.chatDeployment = config.getOrThrow<string>('AZURE_OPENAI_DEPLOYMENT');
+    this.embeddingDeployment = config.getOrThrow<string>(
+      'AZURE_OPENAI_EMBEDDING_DEPLOYMENT',
+    );
     this.client = new OpenAI({
       baseURL: config.getOrThrow<string>('AZURE_OPENAI_ENDPOINT'),
       // Keyless: instead of an API key, the SDK asks for a fresh Entra ID token per request.
@@ -33,10 +37,11 @@ export class AzureOpenAiService {
     });
   }
 
+  // Text generation: words in → words out.
   async generate(systemPrompt: string, userMessage: string): Promise<string> {
     try {
       const response = await this.client.responses.create({
-        model: this.deployment, // on Azure, "model" is the DEPLOYMENT name
+        model: this.chatDeployment, // on Azure, "model" is the DEPLOYMENT name
         input: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -57,21 +62,41 @@ export class AzureOpenAiService {
       }
       return response.output_text;
     } catch (err) {
-      if (!(err instanceof OpenAI.APIError)) throw err;
-
-      // Log the status for debugging, but never the prompt contents or tokens.
-      this.logger.error(`Azure OpenAI error ${err.status}: ${err.message}`);
-      if (err.status === 429) {
-        throw new ServiceUnavailableException(
-          'The AI service is busy. Please try again shortly.',
-        );
-      }
-      if (err.status === 401 || err.status === 403) {
-        this.logger.error(
-          'Check the data-plane role (e.g. Cognitive Services OpenAI User) on the Foundry resource.',
-        );
-      }
-      throw new BadGatewayException('The AI service is unavailable right now.');
+      throw this.toHttpError(err);
     }
+  }
+
+  // Embeddings: text in → vectors (arrays of numbers) out. One vector per input text, same order.
+  async embed(texts: string[]): Promise<number[][]> {
+    try {
+      const response = await this.client.embeddings.create({
+        model: this.embeddingDeployment,
+        input: texts, // batching several texts in one call is faster and cheaper than one call each
+      });
+      this.logger.log(
+        `Embedding call ok (${texts.length} texts, ${response.usage.total_tokens} tokens)`,
+      );
+      return response.data.map((item) => item.embedding);
+    } catch (err) {
+      throw this.toHttpError(err);
+    }
+  }
+
+  private toHttpError(err: unknown): unknown {
+    if (!(err instanceof OpenAI.APIError)) return err;
+
+    // Log the status for debugging, but never the prompt contents or tokens.
+    this.logger.error(`Azure OpenAI error ${err.status}: ${err.message}`);
+    if (err.status === 429) {
+      return new ServiceUnavailableException(
+        'The AI service is busy. Please try again shortly.',
+      );
+    }
+    if (err.status === 401 || err.status === 403) {
+      this.logger.error(
+        'Check the data-plane role (e.g. Cognitive Services OpenAI User) on the Foundry resource.',
+      );
+    }
+    return new BadGatewayException('The AI service is unavailable right now.');
   }
 }

@@ -9,7 +9,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 4 — Azure identity (DefaultAzureCredential)
 - [x] Phase 5 — Azure Key Vault
 - [x] Phase 6 — Azure AI text generation (gpt-5-mini, keyless)
-- [ ] Phase 7 — Embeddings
+- [x] Phase 7 — Embeddings (text-embedding-3-small, 1536 dimensions)
+- [ ] Phase 8 — Knowledge documents
 
 ## Local setup (backend)
     cd backend
@@ -20,7 +21,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 Azure access uses your developer login (no keys in code):
 
     az login --tenant <tenant-id>
-    npm run azure:check     # verifies identity, RBAC and Key Vault access
+    npm run azure:check       # verifies identity, RBAC and Key Vault access
+    npm run embeddings:demo   # embeds sample sentences and prints similarity scores
 
 ## Local setup (frontend)
     cd frontend
@@ -49,6 +51,7 @@ Backend (`backend/.env`):
 | `KEY_VAULT_URL` | config | `https://kv-aibridge-learn.vault.azure.net/` |
 | `AZURE_OPENAI_ENDPOINT` | config | `https://aif-aibridge-learn.openai.azure.com/openai/v1` |
 | `AZURE_OPENAI_DEPLOYMENT` | config | `gpt-5-mini` |
+| `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | config | `text-embedding-3-small` |
 
 None of these are secrets. Secret values live in Key Vault.
 
@@ -67,7 +70,8 @@ Region: **East US 2** (all resources go in this region)
 | Budget alert | `budget-aibridge-monthly` (US$10/month) | ✅ Created (Phase 3) |
 | Key Vault (Standard, RBAC) | `kv-aibridge-learn` | ✅ Created (Phase 5) |
 | Foundry resource (AIServices) | `aif-aibridge-learn` (project `proj-aibridge`) | ✅ Created (Phase 6) |
-| Model deployment | `gpt-5-mini` (Global Standard, 200K TPM, retires Feb 2027) | ✅ Created (Phase 6) |
+| Model deployment (chat) | `gpt-5-mini` (Global Standard, 200K TPM, retires Feb 2027) | ✅ Created (Phase 6) |
+| Model deployment (embeddings) | `text-embedding-3-small` (Global Standard, 1536 dims, retires Feb 2028) | ✅ Created (Phase 7) |
 
 ## Authentication & access
 The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.module.ts`):
