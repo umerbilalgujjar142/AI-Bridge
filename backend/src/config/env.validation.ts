@@ -10,4 +10,5 @@ export const envValidationSchema = Joi.object({
   // Azure (configuration, not secrets: access is controlled by Entra ID + RBAC)
   AZURE_SUBSCRIPTION_ID: Joi.string().guid(),
   AZURE_RESOURCE_GROUP: Joi.string().default('rg-aibridge-dev'),
+  KEY_VAULT_URL: Joi.string().uri({ scheme: 'https' }).required(),
 });

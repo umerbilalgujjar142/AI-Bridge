@@ -6,13 +6,20 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 1 — Local backend foundation (NestJS)
 - [x] Phase 2 — React frontend (Vite, port 5178)
 - [x] Phase 3 — Azure account and resources
-- [ ] Phase 4 — Azure identity
+- [x] Phase 4 — Azure identity (DefaultAzureCredential)
+- [x] Phase 5 — Azure Key Vault
+- [ ] Phase 6 — Azure AI text generation
 
 ## Local setup (backend)
     cd backend
     cp .env.example .env
     npm install
     npm run start:dev
+
+Azure access uses your developer login (no keys in code):
+
+    az login --tenant <tenant-id>
+    npm run azure:check     # verifies identity, RBAC and Key Vault access
 
 ## Local setup (frontend)
     cd frontend
@@ -36,6 +43,11 @@ Backend (`backend/.env`):
 | `NODE_ENV`    | config | `development`           |
 | `PORT`        | config | `3000`                  |
 | `CORS_ORIGIN` | config | `http://localhost:5178` |
+| `AZURE_SUBSCRIPTION_ID` | config | `<subscription-id>` |
+| `AZURE_RESOURCE_GROUP` | config | `rg-aibridge-dev` |
+| `KEY_VAULT_URL` | config | `https://kv-aibridge-learn.vault.azure.net/` |
+
+None of these are secrets. Secret values live in Key Vault.
 
 Frontend (`frontend/.env.local`):
 
@@ -50,5 +62,18 @@ Region: **East US 2** (all resources go in this region)
 |---|---|---|
 | Resource Group | `rg-aibridge-dev` | ✅ Created (Phase 3) |
 | Budget alert | `budget-aibridge-monthly` (US$10/month) | ✅ Created (Phase 3) |
+| Key Vault (Standard, RBAC) | `kv-aibridge-learn` | ✅ Created (Phase 5) |
+
+## Authentication & access
+The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.module.ts`):
+- **Local:** your Azure CLI login (`az login`)
+- **Production:** the Container App's Managed Identity (Phase 14)
+
+| Who | Role | Scope |
+|---|---|---|
+| Developer (you) | Key Vault Secrets Officer | `kv-aibridge-learn` |
+| Container App identity | Key Vault Secrets User (read-only) | `kv-aibridge-learn` (Phase 14) |
+
+Secrets in Key Vault: `demo-secret` (test only).
 
 More resources are added here as we create them in later phases.
