@@ -13,7 +13,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 8 — Knowledge documents, chunking and ingestion
 - [x] Phase 9 — Vector database (PostgreSQL + pgvector)
 - [x] Phase 10 — RAG pipeline wired into `/api/chat`
-- [ ] Phase 11 — Next
+- [x] Phase 11 — Deployed to Azure Container Apps (fully keyless)
+- [ ] Phase 12 — Next
 
 ## Local setup (backend)
     cd backend
@@ -81,6 +82,59 @@ Two behaviours worth knowing:
   own* password, so the model correctly refuses. Retrieval finds related text; grounding
   decides whether it actually answers the question.
 
+## Deployment (Phase 11)
+Live: **https://ca-aibridge-web.victorioushill-38a71c17.eastus2.azurecontainerapps.io**
+
+Two Container Apps in `cae-aibridge`, both scaling to zero (expect a cold start on the
+first request):
+
+| App | Image | Port | Identity |
+|---|---|---|---|
+| `ca-aibridge-api` | `aibridge-api` (Node 24 Alpine, non-root) | 3000 | system-assigned |
+| `ca-aibridge-web` | `aibridge-web` (nginx + Vite build) | 80 | system-assigned |
+
+### Build and deploy
+No Docker needed locally — ACR builds the images in the cloud:
+
+    cd backend
+    az acr build -r acraibridgelearn -t aibridge-api:v1 --platform linux/amd64 .
+
+    cd ../frontend
+    az acr build -r acraibridgelearn -t aibridge-web:v1 --platform linux/amd64 \
+      --build-arg VITE_API_BASE_URL=https://ca-aibridge-api.victorioushill-38a71c17.eastus2.azurecontainerapps.io .
+
+`VITE_*` variables are inlined **at build time**, so the API URL is baked into the web
+image. Changing the API URL means rebuilding the frontend image, not just restarting it.
+
+### Nothing is authenticated with a secret
+| From | To | How |
+|---|---|---|
+| Container App | ACR | managed identity + `AcrPull` (ACR admin user is **disabled**) |
+| Container App | Azure OpenAI | managed identity + `Cognitive Services OpenAI User` |
+| Container App | Key Vault | managed identity + `Key Vault Secrets User` |
+| Container App | PostgreSQL | **Entra token** as the password (`PG_AUTH_MODE=entra`) |
+
+`PG_PASSWORD` does not exist in the deployment, and neither Container App stores a single
+secret. `DefaultAzureCredential` needed **no code change** between laptop and cloud — it
+uses your `az login` locally and the app's managed identity in Azure.
+
+The database role is read-only:
+
+    GRANT CONNECT ON DATABASE aibridge TO "ca-aibridge-api";
+    GRANT USAGE ON SCHEMA public TO "ca-aibridge-api";
+    GRANT SELECT ON knowledge_chunks TO "ca-aibridge-api";
+
+Ingestion stays an admin task run from a laptop, so the deployed app can never write.
+
+### Two things that are easy to get wrong
+- **A consumption Container Apps environment has no fixed outbound IP** (it rotates across
+  hundreds). The Postgres firewall therefore uses *"Allow public access from any Azure
+  service"* — network reach only; Entra auth, TLS and the read-only role still gate access.
+- **The Portal cannot create a Container App from a private ACR** when the registry's admin
+  user is disabled: the app's identity does not exist yet, so neither auth option is
+  selectable. `az containerapp create --registry-identity system` creates the app, its
+  identity and the role assignment together.
+
 ## Local setup (frontend)
     cd frontend
     cp .env.example .env.local
@@ -138,6 +192,10 @@ Region: **East US 2** (all resources go in this region)
 | Model deployment (chat) | `gpt-5-mini` (Global Standard, 200K TPM, retires Feb 2027) | ✅ Created (Phase 6) |
 | Model deployment (embeddings) | `text-embedding-3-small` (Global Standard, 1536 dims, retires Feb 2028) | ✅ Created (Phase 7) |
 | PostgreSQL Flexible Server | `psql-aibridge-learn` (PG 18, Standard_B1ms, pgvector 0.8.2) | ✅ Created (Phase 9) |
+| Container Registry | `acraibridgelearn` (Basic, admin user **disabled**) | ✅ Created (Phase 11) |
+| Container Apps Environment | `cae-aibridge` | ✅ Created (Phase 11) |
+| Container App (API) | `ca-aibridge-api` (NestJS, port 3000) | ✅ Created (Phase 11) |
+| Container App (web) | `ca-aibridge-web` (nginx, port 80) | ✅ Created (Phase 11) |
 
 ## Authentication & access
 The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.module.ts`):

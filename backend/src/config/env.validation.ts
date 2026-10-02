@@ -20,7 +20,13 @@ export const envValidationSchema = Joi.object({
   PG_HOST: Joi.string().hostname().required(),
   PG_PORT: Joi.number().port().default(5432),
   PG_USER: Joi.string().required(),
-  PG_PASSWORD: Joi.string().required(),
+  // "password" locally, "entra" in Azure (managed identity token, no secret).
+  PG_AUTH_MODE: Joi.string().valid('password', 'entra').default('password'),
+  PG_PASSWORD: Joi.string().when('PG_AUTH_MODE', {
+    is: 'password',
+    then: Joi.required(),
+    otherwise: Joi.forbidden(),
+  }),
   PG_DB: Joi.string().required(),
   PG_SSL: Joi.boolean().default(true),
 });
