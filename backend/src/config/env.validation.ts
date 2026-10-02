@@ -14,4 +14,13 @@ export const envValidationSchema = Joi.object({
   AZURE_OPENAI_ENDPOINT: Joi.string().uri({ scheme: 'https' }).required(),
   AZURE_OPENAI_DEPLOYMENT: Joi.string().required(),
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT: Joi.string().required(),
+
+  // PostgreSQL + pgvector (Phase 9). PG_PASSWORD is the only real secret here;
+  // it moves to Key Vault when the app is deployed.
+  PG_HOST: Joi.string().hostname().required(),
+  PG_PORT: Joi.number().port().default(5432),
+  PG_USER: Joi.string().required(),
+  PG_PASSWORD: Joi.string().required(),
+  PG_DB: Joi.string().required(),
+  PG_SSL: Joi.boolean().default(true),
 });

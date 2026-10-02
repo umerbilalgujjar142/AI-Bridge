@@ -11,7 +11,8 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 6 — Azure AI text generation (gpt-5-mini, keyless)
 - [x] Phase 7 — Embeddings (text-embedding-3-small, 1536 dimensions)
 - [x] Phase 8 — Knowledge documents, chunking and ingestion
-- [ ] Phase 9 — Vector database (PostgreSQL + pgvector)
+- [x] Phase 9 — Vector database (PostgreSQL + pgvector)
+- [ ] Phase 10 — RAG pipeline wired into `/api/chat`
 
 ## Local setup (backend)
     cd backend
@@ -30,11 +31,28 @@ Fictional company documents live in `docs/knowledge-base/` (Bridgeway Labs / Bri
 
     cd backend
     npm run chunks:preview                     # how the documents are split into chunks
-    npm run ingest                             # read → chunk → embed → backend/data/knowledge-index.json
+    npm run db:init                            # create the pgvector table + HNSW index (safe to re-run)
+    npm run ingest                             # read → chunk → embed → PostgreSQL
     npm run search -- "your question"          # top 3 most similar chunks
 
 Chunking: one chunk per `##` section, long sections split at paragraphs (~1500 chars max),
 every chunk prefixed with "Title — Section". Re-run `npm run ingest` after changing documents.
+
+### Vector storage (Phase 9)
+Chunks and their embeddings live in the `knowledge_chunks` table on Azure Database for
+PostgreSQL, using the **pgvector** extension:
+
+| Column | Type | Purpose |
+|---|---|---|
+| `id` | `TEXT` primary key | stable chunk id, e.g. `company-policies#3` |
+| `content` | `TEXT` | the text that was embedded |
+| `embedding` | `VECTOR(1536)` | the chunk as numbers |
+| `embedding_model` | `TEXT` | guards against searching with a different model |
+
+Search happens **inside the database** with pgvector's cosine distance operator
+(`ORDER BY embedding <=> $1 LIMIT 3`), accelerated by an HNSW index — not by loading
+every vector into Node. `npm run ingest` replaces the whole table in one transaction,
+so it always mirrors `docs/knowledge-base/`.
 
 ## Local setup (frontend)
     cd frontend
@@ -64,8 +82,16 @@ Backend (`backend/.env`):
 | `AZURE_OPENAI_ENDPOINT` | config | `https://aif-aibridge-learn.openai.azure.com/openai/v1` |
 | `AZURE_OPENAI_DEPLOYMENT` | config | `gpt-5-mini` |
 | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | config | `text-embedding-3-small` |
+| `PG_HOST` | config | `psql-aibridge-learn.postgres.database.azure.com` |
+| `PG_PORT` | config | `5432` |
+| `PG_USER` | config | `pgadmin` |
+| `PG_PASSWORD` | **secret** | the server admin password |
+| `PG_DB` | config | `aibridge` |
+| `PG_SSL` | config | `true` |
 
-None of these are secrets. Secret values live in Key Vault.
+`PG_PASSWORD` is the only real secret in this file — it moves to Key Vault at deployment
+(Phase 14). Everything else is configuration; access to Azure services is controlled by
+Entra ID and RBAC, not by these values.
 
 Frontend (`frontend/.env.local`):
 
@@ -84,6 +110,7 @@ Region: **East US 2** (all resources go in this region)
 | Foundry resource (AIServices) | `aif-aibridge-learn` (project `proj-aibridge`) | ✅ Created (Phase 6) |
 | Model deployment (chat) | `gpt-5-mini` (Global Standard, 200K TPM, retires Feb 2027) | ✅ Created (Phase 6) |
 | Model deployment (embeddings) | `text-embedding-3-small` (Global Standard, 1536 dims, retires Feb 2028) | ✅ Created (Phase 7) |
+| PostgreSQL Flexible Server | `psql-aibridge-learn` (PG 18, Standard_B1ms, pgvector 0.8.2) | ✅ Created (Phase 9) |
 
 ## Authentication & access
 The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.module.ts`):

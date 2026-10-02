@@ -1,14 +1,12 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from '../app.module.js';
 import { AzureOpenAiService } from '../azure/azure-openai.service.js';
 import { loadKnowledgeBase } from '../rag/knowledge-base.js';
+import { KnowledgeStore } from '../rag/knowledge-store.service.js';
 
-// Phase 8: store the index in a local JSON file so we can look at it.
-// Phase 9 replaces this with a real vector database (PostgreSQL + pgvector).
-const OUTPUT_FILE = path.resolve('data', 'knowledge-index.json');
+// Phase 9: read → chunk → embed → store in PostgreSQL (pgvector).
+// Re-running replaces the whole index, so the table always mirrors docs/knowledge-base/.
 const BATCH_SIZE = 16; // texts per embedding call: fewer calls, stays well under request limits
 
 const app = await NestFactory.createApplicationContext(AppModule, {
@@ -17,6 +15,7 @@ const app = await NestFactory.createApplicationContext(AppModule, {
 
 try {
   const ai = app.get(AzureOpenAiService);
+  const store = app.get(KnowledgeStore);
   const embeddingModel = app
     .get(ConfigService)
     .getOrThrow<string>('AZURE_OPENAI_EMBEDDING_DEPLOYMENT');
@@ -33,21 +32,18 @@ try {
     embeddings.push(...(await ai.embed(batch.map((c) => c.content))));
   }
 
-  // 4. Store chunk + embedding + metadata
-  const index = {
-    embeddingModel, // questions MUST be embedded with this same model later
-    dimensions: embeddings[0].length,
-    createdAt: new Date().toISOString(),
-    chunks: chunks.map((chunk, i) => ({ ...chunk, embedding: embeddings[i] })),
-  };
-  await mkdir(path.dirname(OUTPUT_FILE), { recursive: true });
-  await writeFile(OUTPUT_FILE, JSON.stringify(index));
+  // 4. Replace the stored index in one transaction
+  const embedded = chunks.map((chunk, i) => ({
+    ...chunk,
+    embedding: embeddings[i],
+  }));
+  const stored = await store.replaceAll(embedded, embeddingModel);
 
   console.log(
-    `\n✅ Stored ${index.chunks.length} chunks × ${index.dimensions} dimensions`,
+    `\n✅ Stored ${stored} chunks × ${embeddings[0].length} dimensions in PostgreSQL`,
   );
   console.log(`   model : ${embeddingModel}`);
-  console.log(`   file  : ${path.relative(process.cwd(), OUTPUT_FILE)}\n`);
+  console.log(`   table : knowledge_chunks\n`);
 } finally {
   await app.close();
 }

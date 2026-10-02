@@ -24,7 +24,9 @@
     "embeddings:demo": "nest build && node dist/scripts/embeddings-demo.js",
     "chunks:preview": "nest build && node dist/scripts/chunks-preview.js",
     "ingest": "nest build && node dist/scripts/ingest.js",
-    "search": "nest build && node dist/scripts/search.js"
+    "search": "nest build && node dist/scripts/search.js",
+    "db:init": "nest build && node dist/scripts/db-init.js",
+    "db:peek": "nest build && node dist/scripts/db-peek.js"
   },
   "dependencies": {
     "@azure/arm-resources": "^8.0.0",
@@ -34,10 +36,12 @@
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",
+    "@types/pg": "^8.23.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "joi": "^18.2.9",
     "openai": "^7.27.0",
+    "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
