@@ -14,7 +14,27 @@ AI-200 learning project: React + NestJS + Azure AI + RAG, deployed to Azure Cont
 - [x] Phase 9 — Vector database (PostgreSQL + pgvector)
 - [x] Phase 10 — RAG pipeline wired into `/api/chat`
 - [x] Phase 11 — Deployed to Azure Container Apps (fully keyless)
-- [ ] Phase 12 — Next
+
+### Pending
+Ranked by priority, not by order written.
+
+| | Phase | What it adds | Why it matters |
+|---|---|---|---|
+| 1 | **Secure the endpoint** | `@nestjs/throttler` rate limiting; optionally an API key or Entra auth on ingress | `/api/chat` is public and unauthenticated. Anyone with the URL can spend your Azure OpenAI tokens. **The only pending item with a real cost if skipped.** |
+| 2 | **Conversation history** | Multi-turn chat; rewrite follow-ups into standalone questions before retrieval | "How much sick leave?" → "What about parental leave?" fails today. Each request is independent. |
+| 3 | **Azure AI Content Safety** | Filter harmful input/output, detect prompt injection | Heavily examined in AI-200. The system prompt is currently the only defence. |
+| 4 | **Observability** | Application Insights, traces, token/cost dashboards | Log Analytics exists but there is no way to answer "what did today cost?" without the CLI. |
+| 5 | **RAG evaluation** | A question set scored for groundedness and relevance | The honest answer to "is the chatbot actually good?" |
+| 6 | **CI/CD** | GitHub Actions: build images and deploy a revision on push | Deployment is currently manual `az acr build` plus a Portal revision edit. |
+| 7 | **Streaming responses** | Server-sent events so answers appear word by word | Removes the 5s silent pause. Pure UX. |
+
+### Known limitations
+- **No conversation memory.** Every request is independent; follow-up questions that depend on
+  the previous turn ("what about parental leave?") have no antecedent to resolve.
+- **The API is open.** No auth, no rate limit.
+- **Re-ingesting is a laptop task.** The deployed identity holds `SELECT` only, by design.
+- **The frontend image hard-codes the API URL.** `VITE_API_BASE_URL` is inlined at build time,
+  so changing the API URL means rebuilding the web image, not just restarting it.
 
 ## Local setup (backend)
     cd backend
@@ -165,14 +185,17 @@ Backend (`backend/.env`):
 | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | config | `text-embedding-3-small` |
 | `PG_HOST` | config | `psql-aibridge-learn.postgres.database.azure.com` |
 | `PG_PORT` | config | `5432` |
-| `PG_USER` | config | `pgadmin` |
-| `PG_PASSWORD` | **secret** | the server admin password |
+| `PG_USER` | config | `pgadmin` locally, `ca-aibridge-api` in Azure |
+| `PG_AUTH_MODE` | config | `password` locally, `entra` in Azure |
+| `PG_PASSWORD` | **secret** | the server admin password — local only |
 | `PG_DB` | config | `aibridge` |
 | `PG_SSL` | config | `true` |
 
-`PG_PASSWORD` is the only real secret in this file — it moves to Key Vault at deployment
-(Phase 14). Everything else is configuration; access to Azure services is controlled by
-Entra ID and RBAC, not by these values.
+`PG_PASSWORD` is the only real secret here, and it exists **only on a developer laptop**.
+The deployment sets `PG_AUTH_MODE=entra`, where the managed identity's Entra token is used
+in place of a password — so Joi (`env.validation.ts`) *forbids* `PG_PASSWORD` in that mode.
+Everything else is configuration; access is controlled by Entra ID and RBAC, not by these
+values.
 
 Frontend (`frontend/.env.local`):
 
@@ -200,16 +223,79 @@ Region: **East US 2** (all resources go in this region)
 ## Authentication & access
 The backend uses one shared `DefaultAzureCredential` (`backend/src/azure/azure.module.ts`):
 - **Local:** your Azure CLI login (`az login`)
-- **Production:** the Container App's Managed Identity (Phase 14)
+- **Production:** the Container App's Managed Identity (Phase 11)
 
 | Who | Role | Scope |
 |---|---|---|
 | Developer (you) | Key Vault Secrets Officer | `kv-aibridge-learn` |
-| Container App identity | Key Vault Secrets User (read-only) | `kv-aibridge-learn` (Phase 14) |
-| Container App identity | Cognitive Services OpenAI User | `aif-aibridge-learn` (Phase 14) |
+| Developer (you) | Microsoft Entra admin | `psql-aibridge-learn` |
+| `ca-aibridge-api` identity | Key Vault Secrets User (read-only) | `kv-aibridge-learn` |
+| `ca-aibridge-api` identity | Cognitive Services OpenAI User | `aif-aibridge-learn` |
+| `ca-aibridge-api` identity | `AcrPull` | `acraibridgelearn` |
+| `ca-aibridge-api` identity | PostgreSQL role, `SELECT` on `knowledge_chunks` | `psql-aibridge-learn` |
 
-The AI model is called **keyless** (Entra ID token), so no API key is stored anywhere.
+Every hop is keyless — Entra ID tokens, no API keys, no passwords, no registry credentials.
 
 Secrets in Key Vault: `demo-secret` (test only).
 
-More resources are added here as we create them in later phases.
+## Cost and teardown
+The subscription is **Pay-As-You-Go with the spending limit OFF**. The
+`budget-aibridge-monthly` alert only sends email — it does not stop spending.
+
+| Resource | Cost while idle |
+|---|---|
+| `psql-aibridge-learn` | **~$12–15/month** — billed hourly whenever running, even with zero queries |
+| `acraibridgelearn` | **~$5/month** — Basic tier is a flat daily fee |
+| Container Apps + environment | ~$0 — `min-replicas: 0`, consumption environment has no base charge |
+| `aif-aibridge-learn` | **$0** — Global Standard deployments are pay-per-token |
+| `kv-aibridge-learn` | ~$0 — per-operation, fractions of a cent |
+| Log Analytics workspace | ~$0 — 5 GB/month free |
+
+### Pausing the project
+Delete the billable resources; keep the two that are free when idle and most painful to
+recreate. **Do not use the Postgres "Stop" button** — storage still bills, and Azure
+auto-restarts a stopped flexible server after 7 days.
+
+    az containerapp delete -g rg-aibridge-dev -n ca-aibridge-api --yes
+    az containerapp delete -g rg-aibridge-dev -n ca-aibridge-web --yes
+    az containerapp env delete -g rg-aibridge-dev -n cae-aibridge --yes
+    az acr delete -n acraibridgelearn -g rg-aibridge-dev --yes
+    az postgres flexible-server delete -g rg-aibridge-dev -n psql-aibridge-learn --yes
+    az monitor log-analytics workspace delete -g rg-aibridge-dev \
+      -n workspace-rgaibridgedevOmWQ --yes --force
+
+    az resource list -g rg-aibridge-dev -o table   # should leave only Key Vault + Foundry
+
+Billing data lags 24–48 hours, so verify spend the next day, not immediately.
+
+### Rebuilding after a teardown
+Nothing irreplaceable is lost — the knowledge base lives in `docs/knowledge-base/` in git,
+and the vector index is regenerated in about a minute.
+
+1. `az acr create -g rg-aibridge-dev -n <acr-name> --sku Basic -l eastus2`
+2. `az acr build` both images (see **Deployment**)
+3. `az containerapp env create -g rg-aibridge-dev -n cae-aibridge -l eastus2`
+4. `az containerapp create ... --registry-identity system --system-assigned` for both apps
+5. Assign the API identity: `Cognitive Services OpenAI User`, `Key Vault Secrets User`
+6. Postgres: recreate the server, enable the `VECTOR` extension, set yourself as Entra admin,
+   then `pgaadauth_create_principal_with_oid(...)` with the **new** identity's object ID plus
+   the three `GRANT`s
+7. Postgres networking: tick *"Allow public access from any Azure service"*
+8. `npm run db:init && npm run ingest`
+9. Set `CORS_ORIGIN` to the new web URL, and rebuild the web image with the new API URL
+
+Both URLs change, because a new environment means a new domain.
+
+## Environment quirks worth remembering
+- **`az extension add` fails on the dev Mac.** Homebrew `python@3.14` ships a `pyexpat`
+  linked against the system `libexpat`, which lacks a symbol pip needs. Workaround (SIP
+  strips `DYLD_*` from the `az` wrapper, so call the interpreter directly):
+
+      DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib \
+        /opt/homebrew/Cellar/azure-cli/<version>/libexec/bin/python \
+        -m azure.cli extension add -n containerapp
+
+- **Node 22's npm 10 resolves peers differently than npm 11**, which made `npm ci` fail in
+  the image while succeeding locally. The backend image uses **Node 24**. If `npm ci` fails
+  with "Missing: <pkg> from lock file", run `npm install --package-lock-only` first.
+- **Docker is not installed locally.** Images are built in the cloud with `az acr build`.
