@@ -6,4 +6,8 @@ export const envValidationSchema = Joi.object({
     .default('development'),
   PORT: Joi.number().port().default(3000),
   CORS_ORIGIN: Joi.string().uri().default('http://localhost:5178'),
+
+  // Azure (configuration, not secrets: access is controlled by Entra ID + RBAC)
+  AZURE_SUBSCRIPTION_ID: Joi.string().guid(),
+  AZURE_RESOURCE_GROUP: Joi.string().default('rg-aibridge-dev'),
 });

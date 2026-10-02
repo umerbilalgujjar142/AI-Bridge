@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { envValidationSchema } from './config/env.validation.js';
 import { HealthModule } from './health/health.module.js';
 import { ChatModule } from './chat/chat.module.js';
+import { AzureModule } from './azure/azure.module.js';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { ChatModule } from './chat/chat.module.js';
     }),
     HealthModule,
     ChatModule,
+    AzureModule,
   ],
 })
 export class AppModule {}
