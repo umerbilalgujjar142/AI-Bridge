@@ -268,21 +268,47 @@ auto-restarts a stopped flexible server after 7 days.
 
 Billing data lags 24–48 hours, so verify spend the next day, not immediately.
 
+### Teardown performed 2 October 2026
+**Everything** in `rg-aibridge-dev` was deleted, including Key Vault and the Foundry
+resource. Deleting the Foundry resource also removes its model deployments.
+
+Key Vault and Cognitive Services accounts go to **soft-delete**, which is *not billed* but
+*does reserve the name*:
+
+| Resource | Auto-purge |
+|---|---|
+| `kv-aibridge-learn` | 2026-10-09 |
+| `aif-aibridge-learn` | ~48h after deletion |
+
+To reuse a name before its purge date, either recover or purge it first:
+
+    az keyvault recover -n kv-aibridge-learn -l eastus2
+    az cognitiveservices account recover -n aif-aibridge-learn -g rg-aibridge-dev \
+      -l eastus2 --kind AIServices
+    # or, permanently:
+    az keyvault purge -n kv-aibridge-learn -l eastus2
+    az cognitiveservices account purge -n aif-aibridge-learn -g rg-aibridge-dev -l eastus2
+
+After the purge dates the names free themselves and no action is needed.
+
 ### Rebuilding after a teardown
 Nothing irreplaceable is lost — the knowledge base lives in `docs/knowledge-base/` in git,
 and the vector index is regenerated in about a minute.
 
-1. `az acr create -g rg-aibridge-dev -n <acr-name> --sku Basic -l eastus2`
-2. `az acr build` both images (see **Deployment**)
-3. `az containerapp env create -g rg-aibridge-dev -n cae-aibridge -l eastus2`
-4. `az containerapp create ... --registry-identity system --system-assigned` for both apps
-5. Assign the API identity: `Cognitive Services OpenAI User`, `Key Vault Secrets User`
-6. Postgres: recreate the server, enable the `VECTOR` extension, set yourself as Entra admin,
+1. Recreate (or recover) the **Foundry resource** `aif-aibridge-learn` and redeploy
+   `gpt-5-mini` and `text-embedding-3-small` (Global Standard). Recreate the **Key Vault**.
+   These are the slowest steps — quota, deployment names and RBAC all have to be redone.
+2. `az acr create -g rg-aibridge-dev -n <acr-name> --sku Basic -l eastus2`
+3. `az acr build` both images (see **Deployment**)
+4. `az containerapp env create -g rg-aibridge-dev -n cae-aibridge -l eastus2`
+5. `az containerapp create ... --registry-identity system --system-assigned` for both apps
+6. Assign the API identity: `Cognitive Services OpenAI User`, `Key Vault Secrets User`
+7. Postgres: recreate the server, enable the `VECTOR` extension, set yourself as Entra admin,
    then `pgaadauth_create_principal_with_oid(...)` with the **new** identity's object ID plus
    the three `GRANT`s
-7. Postgres networking: tick *"Allow public access from any Azure service"*
-8. `npm run db:init && npm run ingest`
-9. Set `CORS_ORIGIN` to the new web URL, and rebuild the web image with the new API URL
+8. Postgres networking: tick *"Allow public access from any Azure service"*
+9. `npm run db:init && npm run ingest`
+10. Set `CORS_ORIGIN` to the new web URL, and rebuild the web image with the new API URL
 
 Both URLs change, because a new environment means a new domain.
 
